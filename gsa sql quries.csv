@@ -1,0 +1,121 @@
+Remove duplicate records using CTE and ROW_NUMBER
+WITH cte AS (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY country, occupation, years_of_experience, salary  -- group duplicates
+               ORDER BY salary DESC                                           -- keep highest salary row first
+           ) AS rnk
+    FROM job_analysis
+)
+DELETE FROM cte
+WHERE rnk > 1; 
+-- Get average salary for each country
+SELECT country, 
+       AVG(salary) AS avg_sal   -- calculate average salary
+FROM job_analysis
+GROUP BY country                -- group data by country
+ORDER BY avg_sal DESC;          -- show highest paying countries first
+
+
+-- Get average salary based on years of experience
+SELECT years_of_experience, 
+       AVG(salary) AS avg_sal
+FROM job_analysis
+GROUP BY years_of_experience    -- group by experience level
+ORDER BY avg_sal DESC;          -- highest salary first
+
+
+-- Get top 10 occupations with highest average salary
+SELECT TOP 10 occupation, 
+       AVG(salary) AS avg_sal
+FROM job_analysis
+GROUP BY occupation             -- group by job role
+ORDER BY avg_sal DESC;          -- highest paying jobs first
+
+
+-- Compare average salary by gender
+SELECT gender, 
+       AVG(salary) AS avg_sal
+FROM job_analysis
+GROUP BY gender                 -- group by gender
+ORDER BY avg_sal DESC;          -- highest avg salary first
+
+
+-- Analyze salary trend by month and year
+SELECT month, 
+       year, 
+       AVG(salary) AS avg_sal
+FROM job_analysis
+GROUP BY month, year            -- group by time
+ORDER BY month, year;           -- sort chronologically
+
+
+-- Find second highest salary
+SELECT MAX(salary)
+FROM job_analysis
+WHERE salary < (
+    SELECT MAX(salary)          -- find highest salary
+    FROM job_analysis
+);                             -- then get next highest
+
+
+-- Get top 10 highest salaries with global ranking
+SELECT TOP 10 country, occupation, field, salary,
+       DENSE_RANK() OVER (ORDER BY salary DESC) AS sal_rank  -- rank salaries globally
+FROM job_analysis;
+
+
+-- Get top salaries within each country
+SELECT TOP 10 country, occupation, field, salary,
+       DENSE_RANK() OVER (
+           PARTITION BY country        -- reset rank for each country
+           ORDER BY salary DESC        -- highest salary first
+       ) AS sal_country
+FROM job_analysis;
+
+
+-- Get top 10% highest salaries using NTILE
+WITH ranked AS (
+    SELECT country, occupation, salary,
+           NTILE(10) OVER (ORDER BY salary DESC) AS bucket  -- divide into 10 groups
+    FROM job_analysis
+)
+SELECT *
+FROM ranked
+WHERE bucket = 1;   -- select top 10% salaries
+
+
+-- Rank salaries within same experience level
+SELECT years_of_experience,
+       occupation,
+       salary,
+       RANK() OVER (
+           PARTITION BY years_of_experience   -- group by experience
+           ORDER BY salary DESC               -- highest salary first
+       ) AS exp_rank
+FROM job_analysis
+ORDER BY years_of_experience, exp_rank;
+
+
+-- Compare average salary by company size and rank them
+SELECT company_size,
+       AVG(salary) AS avg_salary,
+       RANK() OVER (
+           ORDER BY AVG(salary) DESC          -- rank based on avg salary
+       ) AS rank_by_avg_salary
+FROM job_analysis
+GROUP BY company_size
+ORDER BY rank_by_avg_salary;
+
+
+-- Compare salaries of employees in same city & occupation (self join)
+SELECT e1.country,
+       e1.city,
+       e1.occupation,
+       e1.salary AS sal1,   -- salary from first instance
+       e2.salary AS sal2    -- salary from second instance
+FROM job_analysis e1
+JOIN job_analysis e2
+    ON e1.city = e2.city                -- same city
+    AND e1.occupation = e2.occupation  -- same job role
+    AND e1.salary <> e2.salary;        -- different salaries
